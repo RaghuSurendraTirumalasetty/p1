@@ -1,3 +1,4 @@
+#sudo /opt/pysiem-lite/simulate_attacks.sh
 # PySIEM-Lite 🛡️
 ### *Lightweight Autonomous Host-Based SIEM & Active Defense Engine for Kali Linux*
 
