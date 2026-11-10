@@ -1,4 +1,7 @@
-#sudo /opt/pysiem-lite/simulate_attacks.sh
+#sudo /opt/pysiem-lite/simulate_attacks.sh ---> attack simulation
+cd ~/Desktop/PySIEM-Lite
+chmod +x install.sh simulate_attacks.sh main.py
+sudo ./install.sh
 # PySIEM-Lite 🛡️
 ### *Lightweight Autonomous Host-Based SIEM & Active Defense Engine for Kali Linux*
 
