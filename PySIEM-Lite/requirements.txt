@@ -1,0 +1,4 @@
+# PySIEM-Lite: Lightweight SIEM & Active Defense Engine
+# Designed for low-overhead deployment on Kali Linux
+
+flask>=2.2.0

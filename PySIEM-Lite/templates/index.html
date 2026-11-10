@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PySIEM-Lite | SOC Analyst Console</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        soc: {
+                            bg: '#090d16',
+                            card: '#0f172a',
+                            border: '#1e293b',
+                            accent: '#38bdf8',
+                            crimson: '#ef4444',
+                            amber: '#f59e0b',
+                            emerald: '#10b981'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for cyber terminal look */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        .pulse-red {
+            animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .4; }
+        }
+    </style>
+</head>
+<body class="bg-soc-bg text-slate-200 font-sans min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-black">
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-soc-border bg-soc-card/80 backdrop-blur-md sticky top-0 z-40 px-6 py-3.5">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                    <i data-lucide="shield-alert" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="font-black text-lg tracking-wider text-white">PySIEM<span class="text-cyan-400 font-light">-Lite</span></span>
+                        <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 font-semibold">Kali SOC v1.0</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 font-mono">Real-time Log Normalization & Active Defense Engine</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <!-- Stream Status Badge -->
+                <div class="flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-700/60 text-xs font-mono">
+                    <span id="stream-status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span id="stream-status-text" class="text-slate-300">Live SSE Stream</span>
+                </div>
+
+                <!-- Manual Block Modal Trigger -->
+                <button onclick="openBlockModal()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-rose-600/20 text-rose-300 border border-rose-500/30 hover:bg-rose-600/30 text-xs font-semibold transition">
+                    <i data-lucide="user-x" class="w-3.5 h-3.5"></i>
+                    <span>Manual Ban IP</span>
+                </button>
+
+                <!-- Refresh Button -->
+                <button onclick="refreshAllData()" class="p-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Manual Sync">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 p-6 space-y-6 max-w-[1700px] w-full mx-auto">
+
+        <!-- KPI Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Total Events -->
+            <div class="bg-soc-card border border-soc-border rounded-xl p-5 relative overflow-hidden group hover:border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs uppercase font-mono tracking-wider text-slate-400">Total Ingested Events</p>
+                        <h3 id="stat-total-events" class="text-3xl font-black text-white mt-1 font-mono">0</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                        <i data-lucide="activity" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-400 space-x-1 font-mono">
+                    <span class="text-emerald-400 flex items-center font-semibold"><i data-lucide="check" class="w-3.5 h-3.5 mr-0.5"></i>Normalized</span>
+                    <span>via syslog & web tailers</span>
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500/40"></div>
+            </div>
+
+            <!-- Total Alerts -->
+            <div class="bg-soc-card border border-soc-border rounded-xl p-5 relative overflow-hidden group hover:border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs uppercase font-mono tracking-wider text-slate-400">Security Alerts</p>
+                        <h3 id="stat-total-alerts" class="text-3xl font-black text-amber-400 mt-1 font-mono">0</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                        <i data-lucide="bell" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-400 space-x-1 font-mono">
+                    <span>Correlated via sliding windows</span>
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500/40"></div>
+            </div>
+
+            <!-- Critical Incidents -->
+            <div class="bg-soc-card border border-soc-border rounded-xl p-5 relative overflow-hidden group hover:border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs uppercase font-mono tracking-wider text-slate-400">Critical Incidents</p>
+                        <h3 id="stat-critical-alerts" class="text-3xl font-black text-rose-500 mt-1 font-mono">0</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                        <i data-lucide="flame" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-400 space-x-1 font-mono">
+                    <span class="text-rose-400 font-semibold">Immediate Priority</span>
+                    <span>threat triage</span>
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-rose-500/40"></div>
+            </div>
+
+            <!-- Blocked Attackers -->
+            <div class="bg-soc-card border border-soc-border rounded-xl p-5 relative overflow-hidden group hover:border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs uppercase font-mono tracking-wider text-slate-400">Active iptables Bans</p>
+                        <h3 id="stat-active-blocks" class="text-3xl font-black text-emerald-400 mt-1 font-mono">0</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <i data-lucide="shield-check" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-400 space-x-1 font-mono">
+                    <span class="text-emerald-400 font-semibold">Active Defense</span>
+                    <span>automated containment</span>
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500/40"></div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Event Distribution Doughnut -->
+            <div class="bg-soc-card border border-soc-border rounded-xl p-5 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
+                        <i data-lucide="pie-chart" class="w-4 h-4 text-cyan-400"></i>
+                        <span>Ingested Event Types</span>
+                    </h4>
+                </div>
+                <div class="flex-1 flex items-center justify-center relative min-h-[200px]">
+                    <canvas id="eventDistChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Detection Rules Activity Bar Chart -->
+            <div class="bg-soc-card border border-soc-border rounded-xl p-5 lg:col-span-2 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-cyan-400"></i>
+                        <span>Alerts by Detection Rule</span>
+                    </h4>
+                    <span class="text-xs text-slate-400 font-mono">RULE-01 (SSH) | RULE-02 (Web) | RULE-03 (Sudo)</span>
+                </div>
+                <div class="flex-1 min-h-[200px]">
+                    <canvas id="ruleDistChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Blocklist & Containment Management -->
+        <div class="bg-soc-card border border-soc-border rounded-xl overflow-hidden">
+            <div class="px-5 py-4 border-b border-soc-border flex items-center justify-between bg-slate-900/60">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+                    <h4 class="text-sm font-bold uppercase tracking-wider text-white">Active Defense Blocklist (iptables DROP Rules)</h4>
+                </div>
+                <span id="blocked-count-badge" class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs font-mono font-semibold">0 Attackers Blocked</span>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs font-mono">
+                    <thead class="bg-slate-900/80 text-slate-400 border-b border-soc-border uppercase tracking-wider">
+                        <tr>
+                            <th class="px-5 py-3">Attacker IP</th>
+                            <th class="px-5 py-3">Triggered Reason</th>
+                            <th class="px-5 py-3">Rule ID</th>
+                            <th class="px-5 py-3">Blocked Timestamp</th>
+                            <th class="px-5 py-3">Status</th>
+                            <th class="px-5 py-3 text-right">Containment Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="blocked-ips-tbody" class="divide-y divide-soc-border text-slate-300">
+                        <tr>
+                            <td colspan="6" class="px-5 py-8 text-center text-slate-500 italic">No actively blocked IPs. Network perimeter clean.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Security Alerts Feed -->
+        <div class="bg-soc-card border border-soc-border rounded-xl overflow-hidden">
+            <div class="px-5 py-4 border-b border-soc-border flex items-center justify-between bg-slate-900/60">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-rose-500 pulse-red"></div>
+                    <h4 class="text-sm font-bold uppercase tracking-wider text-white">Security Alerts Stream</h4>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <select id="alert-severity-filter" onchange="loadAlerts()" class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded px-2.5 py-1 font-mono focus:outline-none focus:border-cyan-500">
+                        <option value="">All Severities</option>
+                        <option value="CRITICAL">Critical</option>
+                        <option value="HIGH">High</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="LOW">Low</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-900/80 text-slate-400 border-b border-soc-border uppercase font-mono tracking-wider">
+                        <tr>
+                            <th class="px-5 py-3">Timestamp</th>
+                            <th class="px-5 py-3">Severity</th>
+                            <th class="px-5 py-3">Rule Name</th>
+                            <th class="px-5 py-3">Attacker / User</th>
+                            <th class="px-5 py-3">Description</th>
+                            <th class="px-5 py-3">Mitigation</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alerts-tbody" class="divide-y divide-soc-border font-mono text-slate-300">
+                        <tr>
+                            <td colspan="6" class="px-5 py-8 text-center text-slate-500 italic">No alerts recorded yet. System monitoring active.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Live Parsed & Normalized Log Feed (Terminal Style) -->
+        <div class="bg-soc-card border border-soc-border rounded-xl overflow-hidden flex flex-col">
+            <div class="px-5 py-3.5 border-b border-soc-border flex flex-wrap items-center justify-between gap-3 bg-slate-900/80">
+                <div class="flex items-center space-x-2.5">
+                    <i data-lucide="terminal" class="w-4 h-4 text-cyan-400"></i>
+                    <h4 class="text-sm font-bold uppercase tracking-wider text-white">Live Ingested & Normalized Log Feed</h4>
+                </div>
+
+                <div class="flex items-center space-x-3">
+                    <!-- Search Input -->
+                    <div class="relative">
+                        <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400"></i>
+                        <input id="log-search-input" type="text" placeholder="Filter IP, user, path..." oninput="filterLogs()" class="bg-slate-950 border border-slate-700/80 text-slate-200 text-xs rounded-md pl-8 pr-3 py-1 font-mono focus:outline-none focus:border-cyan-500 w-48 md:w-64">
+                    </div>
+
+                    <!-- Type Filter -->
+                    <select id="log-type-filter" onchange="loadEvents()" class="bg-slate-950 border border-slate-700/80 text-slate-300 text-xs rounded-md px-2.5 py-1 font-mono focus:outline-none focus:border-cyan-500">
+                        <option value="">All Event Types</option>
+                        <option value="LOGIN_FAILED">LOGIN_FAILED</option>
+                        <option value="LOGIN_SUCCESS">LOGIN_SUCCESS</option>
+                        <option value="SUDO_FAILURE">SUDO_FAILURE</option>
+                        <option value="WEB_REQUEST">WEB_REQUEST</option>
+                    </select>
+
+                    <!-- Stream Pause/Play Toggle -->
+                    <button id="stream-toggle-btn" onclick="toggleStream()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-mono flex items-center space-x-1 transition">
+                        <i id="stream-toggle-icon" data-lucide="pause" class="w-3.5 h-3.5 text-cyan-400"></i>
+                        <span id="stream-toggle-label">Pause</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Terminal Stream Body -->
+            <div id="logs-stream-container" class="p-4 max-h-96 overflow-y-auto space-y-2 font-mono text-xs bg-slate-950/70 border-t border-slate-900">
+                <div class="text-slate-500 italic text-center py-4">Waiting for incoming log events...</div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-soc-border bg-soc-card/40 px-6 py-3 text-center text-xs text-slate-500 font-mono">
+        PySIEM-Lite &bull; Autonomous Host-Based Threat Detection & Mitigation Engine for Kali Linux
+    </footer>
+
+    <!-- Manual Ban Modal -->
+    <div id="block-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-soc-card border border-soc-border rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-soc-border pb-3">
+                <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                    <i data-lucide="shield-x" class="w-5 h-5 text-rose-500"></i>
+                    <span>Manual Host Containment</span>
+                </h3>
+                <button onclick="closeBlockModal()" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3 font-mono text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">Target Attacker IP Address</label>
+                    <input id="modal-ip-input" type="text" placeholder="e.g. 192.168.1.188" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-white focus:outline-none focus:border-rose-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Containment Reason / Case Reference</label>
+                    <input id="modal-reason-input" type="text" value="Manual Analyst Incident Containment" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-white focus:outline-none focus:border-rose-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Ban Duration (Seconds)</label>
+                    <input id="modal-duration-input" type="number" value="3600" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-white focus:outline-none focus:border-rose-500">
+                    <p class="text-[10px] text-slate-500 mt-1">3600 = 1 Hour. iptables will automatically unban when expired.</p>
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-2 border-t border-soc-border">
+                <button onclick="closeBlockModal()" class="px-4 py-1.5 rounded-md bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-mono">Cancel</button>
+                <button onclick="submitManualBlock()" class="px-4 py-1.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-semibold flex items-center space-x-1.5">
+                    <i data-lucide="slash" class="w-3.5 h-3.5"></i>
+                    <span>Execute iptables DROP</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 space-y-2 pointer-events-none"></div>
+
+    <!-- Application JavaScript Logic -->
+    <script>
+        // State variables
+        let isStreamPaused = false;
+        let eventDistChart = null;
+        let ruleDistChart = null;
+        let cachedEvents = [];
+
+        // Severity Color Utility
+        function getSeverityBadge(severity) {
+            switch(severity) {
+                case 'CRITICAL':
+                    return '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800 pulse-red">CRITICAL</span>';
+                case 'HIGH':
+                    return '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-950 text-orange-400 border border-orange-800">HIGH</span>';
+                case 'MEDIUM':
+                    return '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">MEDIUM</span>';
+                case 'LOW':
+                default:
+                    return '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 text-blue-400 border border-blue-800">LOW</span>';
+            }
+        }
+
+        // Event Type Badge Utility
+        function getEventTypeBadge(type) {
+            switch(type) {
+                case 'LOGIN_FAILED':
+                    return '<span class="text-rose-400 bg-rose-950/80 px-1.5 py-0.5 rounded border border-rose-800/60 font-semibold">LOGIN_FAILED</span>';
+                case 'LOGIN_SUCCESS':
+                    return '<span class="text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/60 font-semibold">LOGIN_SUCCESS</span>';
+                case 'SUDO_FAILURE':
+                    return '<span class="text-purple-400 bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-800/60 font-semibold">SUDO_FAILURE</span>';
+                case 'WEB_REQUEST':
+                    return '<span class="text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60 font-semibold">WEB_REQUEST</span>';
+                default:
+                    return `<span class="text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">${type}</span>`;
+            }
+        }
+
+        // Show Toast Notifications
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto flex items-center space-x-2 px-4 py-2.5 rounded-lg border text-xs font-mono shadow-xl transition-all duration-300 transform translate-y-2 opacity-0 ${
+                type === 'success' ? 'bg-emerald-950 text-emerald-200 border-emerald-800' :
+                type === 'error' ? 'bg-rose-950 text-rose-200 border-rose-800' :
+                'bg-slate-900 text-slate-200 border-slate-700'
+            }`;
+            toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : type === 'error' ? 'alert-triangle' : 'info'}" class="w-4 h-4"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Initialize Charts
+        function initCharts() {
+            // Event Distribution Chart
+            const ctx1 = document.getElementById('eventDistChart').getContext('2d');
+            eventDistChart = new Chart(ctx1, {
+                type: 'doughnut',
+                data: {
+                    labels: ['LOGIN_FAILED', 'LOGIN_SUCCESS', 'SUDO_FAILURE', 'WEB_REQUEST'],
+                    datasets: [{
+                        data: [0, 0, 0, 0],
+                        backgroundColor: ['#ef4444', '#10b981', '#a855f7', '#06b6d4'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#94a3b8', font: { family: 'monospace', size: 11 } } }
+                    },
+                    cutout: '68%'
+                }
+            });
+
+            // Rule Alerts Bar Chart
+            const ctx2 = document.getElementById('ruleDistChart').getContext('2d');
+            ruleDistChart = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: ['RULE-01 (SSH Brute)', 'RULE-02 (Web Recon)', 'RULE-03 (Sudo Abuse)'],
+                    datasets: [{
+                        label: 'Triggered Count',
+                        data: [0, 0, 0],
+                        backgroundColor: ['#f43f5e', '#38bdf8', '#c084fc'],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { family: 'monospace', size: 10 } }, grid: { display: false } },
+                        y: { ticks: { color: '#94a3b8', font: { family: 'monospace' }, beginAtZero: true, stepSize: 1 }, grid: { color: '#1e293b' } }
+                    }
+                }
+            });
+        }
+
+        // Update Charts Data
+        function updateCharts(metrics) {
+            if (metrics.event_distribution && eventDistChart) {
+                const ed = metrics.event_distribution;
+                eventDistChart.data.datasets[0].data = [
+                    ed['LOGIN_FAILED'] || 0,
+                    ed['LOGIN_SUCCESS'] || 0,
+                    ed['SUDO_FAILURE'] || 0,
+                    ed['WEB_REQUEST'] || 0
+                ];
+                eventDistChart.update();
+            }
+
+            if (metrics.rule_distribution && ruleDistChart) {
+                const rd = metrics.rule_distribution;
+                ruleDistChart.data.datasets[0].data = [
+                    rd['RULE-01'] || 0,
+                    rd['RULE-02'] || 0,
+                    rd['RULE-03'] || 0
+                ];
+                ruleDistChart.update();
+            }
+        }
+
+        // Fetch Metrics & Update KPI Cards
+        async function loadMetrics() {
+            try {
+                const res = await fetch('/api/metrics');
+                const json = await res.json();
+                if (json.success) {
+                    const d = json.data;
+                    document.getElementById('stat-total-events').innerText = d.total_events;
+                    document.getElementById('stat-total-alerts').innerText = d.total_alerts;
+                    document.getElementById('stat-critical-alerts').innerText = d.critical_alerts;
+                    document.getElementById('stat-active-blocks').innerText = d.active_blocks;
+                    document.getElementById('blocked-count-badge').innerText = `${d.active_blocks} Attackers Blocked`;
+                    updateCharts(d);
+                }
+            } catch (err) {
+                console.error("Failed to fetch metrics:", err);
+            }
+        }
+
+        // Fetch Alerts
+        async function loadAlerts() {
+            try {
+                const sev = document.getElementById('alert-severity-filter').value;
+                const url = sev ? `/api/alerts?limit=50&severity=${sev}` : '/api/alerts?limit=50';
+                const res = await fetch(url);
+                const json = await res.json();
+                if (json.success) {
+                    renderAlertsTable(json.data);
+                }
+            } catch (err) {
+                console.error("Failed to load alerts:", err);
+            }
+        }
+
+        function renderAlertsTable(alerts) {
+            const tbody = document.getElementById('alerts-tbody');
+            if (!alerts || alerts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-slate-500 italic">No alerts recorded yet. System monitoring active.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = alerts.map(a => {
+                let mitBadge = '<span class="text-slate-400">NONE</span>';
+                if (a.mitigation_status === 'BLOCKED') {
+                    mitBadge = '<span class="text-emerald-400 font-bold bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">DROPPED (iptables)</span>';
+                } else if (a.mitigation_status === 'SIMULATED_BLOCKED') {
+                    mitBadge = '<span class="text-cyan-400 font-bold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">SIMULATED DROP</span>';
+                } else if (a.mitigation_status === 'ALERT_ONLY') {
+                    mitBadge = '<span class="text-amber-400 bg-amber-950 px-2 py-0.5 rounded border border-amber-800">ALERT ONLY</span>';
+                }
+
+                return `
+                    <tr class="hover:bg-slate-900/60 transition">
+                        <td class="px-5 py-3 text-slate-400 text-[11px] whitespace-nowrap">${a.timestamp_str}</td>
+                        <td class="px-5 py-3">${getSeverityBadge(a.severity)}</td>
+                        <td class="px-5 py-3 font-semibold text-white">
+                            <span class="text-cyan-400 font-mono">[${a.rule_id}]</span> ${a.rule_name}
+                        </td>
+                        <td class="px-5 py-3">
+                            <span class="text-rose-400 font-bold">${a.source_ip || '-'}</span>
+                            ${a.destination_user ? `<span class="text-slate-400 text-[10px] block">user: ${a.destination_user}</span>` : ''}
+                        </td>
+                        <td class="px-5 py-3 text-slate-300 max-w-md">${a.description}</td>
+                        <td class="px-5 py-3 whitespace-nowrap">${mitBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Fetch Blocked IPs
+        async function loadBlockedIPs() {
+            try {
+                const res = await fetch('/api/blocked-ips?active_only=true');
+                const json = await res.json();
+                if (json.success) {
+                    renderBlockedTable(json.data);
+                }
+            } catch (err) {
+                console.error("Failed to load blocked IPs:", err);
+            }
+        }
+
+        function renderBlockedTable(blockedList) {
+            const tbody = document.getElementById('blocked-ips-tbody');
+            if (!blockedList || blockedList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-slate-500 italic">No actively blocked IPs. Network perimeter clean.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = blockedList.map(b => {
+                return `
+                    <tr class="hover:bg-slate-900/60 transition">
+                        <td class="px-5 py-3 text-rose-400 font-bold flex items-center space-x-1.5">
+                            <i data-lucide="shield-ban" class="w-3.5 h-3.5 text-rose-500"></i>
+                            <span>${b.ip_address}</span>
+                        </td>
+                        <td class="px-5 py-3 text-slate-300 max-w-xs truncate">${b.reason}</td>
+                        <td class="px-5 py-3 text-cyan-400 font-bold">${b.rule_id || 'MANUAL'}</td>
+                        <td class="px-5 py-3 text-slate-400 text-[11px]">${b.blocked_at_str}</td>
+                        <td class="px-5 py-3">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">ACTIVE DROP</span>
+                        </td>
+                        <td class="px-5 py-3 text-right">
+                            <button onclick="unblockIP('${b.ip_address}')" class="px-3 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold transition flex items-center space-x-1 ml-auto">
+                                <i data-lucide="unlock" class="w-3 h-3"></i>
+                                <span>Unban IP</span>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        // Unban IP Action
+        async function unblockIP(ip) {
+            try {
+                const res = await fetch('/api/unblock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip: ip })
+                });
+                const json = await res.json();
+                if (json.success) {
+                    showToast(`IP ${ip} unblocked and iptables DROP removed.`, 'success');
+                    loadBlockedIPs();
+                    loadMetrics();
+                } else {
+                    showToast(`Failed to unblock: ${json.error || json.message}`, 'error');
+                }
+            } catch (err) {
+                showToast(`Unban request error: ${err}`, 'error');
+            }
+        }
+
+        // Manual Block Submission
+        async function submitManualBlock() {
+            const ip = document.getElementById('modal-ip-input').value.trim();
+            const reason = document.getElementById('modal-reason-input').value.trim();
+            const duration = parseInt(document.getElementById('modal-duration-input').value) || 3600;
+
+            if (!ip) {
+                showToast('Please specify a valid IP address.', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/block', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip, reason, duration })
+                });
+                const json = await res.json();
+                if (json.success) {
+                    showToast(`Manual DROP rule executed for IP ${ip}`, 'success');
+                    closeBlockModal();
+                    loadBlockedIPs();
+                    loadMetrics();
+                } else {
+                    showToast(`Failed to block: ${json.error || json.status}`, 'error');
+                }
+            } catch (err) {
+                showToast(`Block request error: ${err}`, 'error');
+            }
+        }
+
+        // Modal Controls
+        function openBlockModal() {
+            document.getElementById('modal-ip-input').value = '';
+            document.getElementById('block-modal').classList.remove('hidden');
+        }
+        function closeBlockModal() {
+            document.getElementById('block-modal').classList.add('hidden');
+        }
+
+        // Fetch & Stream Log Events
+        async function loadEvents() {
+            try {
+                const type = document.getElementById('log-type-filter').value;
+                const url = type ? `/api/events?limit=80&type=${type}` : '/api/events?limit=80';
+                const res = await fetch(url);
+                const json = await res.json();
+                if (json.success) {
+                    cachedEvents = json.data;
+                    renderLogStream(cachedEvents);
+                }
+            } catch (err) {
+                console.error("Failed to load log events:", err);
+            }
+        }
+
+        function renderLogStream(events) {
+            const container = document.getElementById('logs-stream-container');
+            if (!events || events.length === 0) {
+                container.innerHTML = '<div class="text-slate-500 italic text-center py-4">Waiting for incoming log events...</div>';
+                return;
+            }
+
+            container.innerHTML = events.map(e => {
+                let extraInfo = '';
+                if (e.extra_data) {
+                    if (e.extra_data.path) extraInfo += `<span class="text-yellow-400 ml-2 font-mono">${e.extra_data.method || ''} ${e.extra_data.path}</span>`;
+                    if (e.extra_data.reason) extraInfo += `<span class="text-slate-400 ml-2">(${e.extra_data.reason})</span>`;
+                }
+
+                return `
+                    <div class="p-2 rounded bg-slate-900/90 border border-slate-800/80 hover:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-[11px] transition">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-slate-500 text-[10px]">${e.timestamp_str}</span>
+                            <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-semibold text-[10px]">[${e.log_source}]</span>
+                            ${getEventTypeBadge(e.event_type)}
+                            ${e.response_code ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${e.response_code >= 400 ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-emerald-950 text-emerald-400'}">${e.response_code}</span>` : ''}
+                            <span class="text-cyan-300 font-bold">${e.source_ip || '-'}</span>
+                            ${e.destination_user ? `<span class="text-slate-400">&rarr; user: <span class="text-white font-semibold">${e.destination_user}</span></span>` : ''}
+                            ${extraInfo}
+                        </div>
+                        <div class="text-[10px] text-slate-500 truncate max-w-sm hidden xl:block" title="${e.raw_log}">
+                            ${e.raw_log}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterLogs() {
+            const query = document.getElementById('log-search-input').value.toLowerCase();
+            if (!query) {
+                renderLogStream(cachedEvents);
+                return;
+            }
+            const filtered = cachedEvents.filter(e => {
+                return (e.source_ip && e.source_ip.toLowerCase().includes(query)) ||
+                       (e.destination_user && e.destination_user.toLowerCase().includes(query)) ||
+                       (e.event_type && e.event_type.toLowerCase().includes(query)) ||
+                       (e.raw_log && e.raw_log.toLowerCase().includes(query));
+            });
+            renderLogStream(filtered);
+        }
+
+        function toggleStream() {
+            isStreamPaused = !isStreamPaused;
+            const btn = document.getElementById('stream-toggle-btn');
+            const icon = document.getElementById('stream-toggle-icon');
+            const label = document.getElementById('stream-toggle-label');
+            const dot = document.getElementById('stream-status-dot');
+
+            if (isStreamPaused) {
+                label.innerText = 'Resume';
+                icon.setAttribute('data-lucide', 'play');
+                dot.classList.remove('bg-emerald-500', 'animate-pulse');
+                dot.classList.add('bg-amber-500');
+            } else {
+                label.innerText = 'Pause';
+                icon.setAttribute('data-lucide', 'pause');
+                dot.classList.remove('bg-amber-500');
+                dot.classList.add('bg-emerald-500', 'animate-pulse');
+            }
+            lucide.createIcons();
+        }
+
+        // Initialize Server-Sent Events (SSE)
+        function initSSE() {
+            const evtSource = new EventSource('/api/stream');
+
+            evtSource.addEventListener('new_events', function(e) {
+                if (isStreamPaused) return;
+                const events = JSON.parse(e.data);
+                cachedEvents = [...events.reverse(), ...cachedEvents].slice(0, 100);
+                filterLogs();
+            });
+
+            evtSource.addEventListener('new_alerts', function(e) {
+                const alerts = JSON.parse(e.data);
+                alerts.forEach(a => {
+                    showToast(`ALERT: [${a.rule_id}] ${a.rule_name} (${a.severity})`, a.severity === 'CRITICAL' ? 'error' : 'info');
+                });
+                loadAlerts();
+                loadBlockedIPs();
+            });
+
+            evtSource.addEventListener('metrics_update', function(e) {
+                const metrics = JSON.parse(e.data);
+                document.getElementById('stat-total-events').innerText = metrics.total_events;
+                document.getElementById('stat-total-alerts').innerText = metrics.total_alerts;
+                document.getElementById('stat-critical-alerts').innerText = metrics.critical_alerts;
+                document.getElementById('stat-active-blocks').innerText = metrics.active_blocks;
+                document.getElementById('blocked-count-badge').innerText = `${metrics.active_blocks} Attackers Blocked`;
+                updateCharts(metrics);
+            });
+
+            evtSource.onerror = function() {
+                document.getElementById('stream-status-dot').className = 'w-2.5 h-2.5 rounded-full bg-amber-500';
+                document.getElementById('stream-status-text').innerText = 'Polling Fallback';
+            };
+        }
+
+        // Full Data Refresh
+        function refreshAllData() {
+            loadMetrics();
+            loadAlerts();
+            loadBlockedIPs();
+            loadEvents();
+            showToast('Console metrics synchronized', 'info');
+        }
+
+        // Page Boot
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            initCharts();
+            refreshAllData();
+            initSSE();
+
+            // Fallback polling every 5s
+            setInterval(() => {
+                if (!isStreamPaused) {
+                    loadMetrics();
+                    loadAlerts();
+                    loadBlockedIPs();
+                }
+            }, 5000);
+        });
+    </script>
+</body>
+</html>
